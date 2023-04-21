@@ -74,13 +74,13 @@ class SVM(Solver):
         self.eps = eps
         self.max_iter = max_iter
         self.kkt_thr = kkt_thr
+        self.version = version
         if kernel_type == 'linear':
             self.kernel = self.linear_kernel
         elif kernel_type == 'rbf':
             self.kernel = self.rbf_kernel
             self.gamma_rbf = gamma_rbf
 
-        self.version = version
         self.b = np.array([])  # SVM's threshold
         self.alpha = np.array([])  # Alpha parameters of the support vectors
         self.support_vectors = np.array([])  # Matrix in which each row is a support vector

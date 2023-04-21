@@ -18,14 +18,14 @@ def generate_linearly_separable_data(size):
     classes = []
     for d in allData:
         if d[1] >= 2.5 * d[0] + 1.5:
-            classes.append(1)
+            classes.append(0)
         else:
-            classes.append(-1)
+            classes.append(1)
     return allData, classes
 
 def test_svmlib_linear(X, Y):
     # fit the model
-    clf = svm.SVC(kernel='linear', C=1)
+    clf = svm.SVC(kernel='linear', C=3)
     print("LibSvm")
     start = timer()
     clf.fit(X, Y)
@@ -69,7 +69,7 @@ def test_platt_linear(X, Y):
     solver = OneVsAllClassifier(
         solver=SVM,
         num_classes=2,
-        c=1.0,
+        c=3.0,
         kkt_thr=1e-3,
         max_iter=1e3,
         version='platt',
@@ -87,13 +87,14 @@ def test_platt_linear(X, Y):
     end = timer()
     print("Time")
     print(end - start)
+    solver.plot()
     pl.show()
 
 def test_kerthi1_linear(X, Y):
     solver = OneVsAllClassifier(
         solver=SVM,
         num_classes=2,
-        c=1.0,
+        c=3.0,
         kkt_thr=1e-3,
         max_iter=1e3,
         version='keerthi1',
