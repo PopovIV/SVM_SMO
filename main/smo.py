@@ -44,7 +44,8 @@ class SVM(Solver):
         eps: float = 10e-3,
         max_iter: int = 1e4,
         kernel_type: str = 'linear',
-        gamma_rbf: float = 1.
+        gamma_rbf: float = 1,
+        version: float = 'platt'
     ) -> None:
 
         """
@@ -63,6 +64,9 @@ class SVM(Solver):
         if not kernel_type in ['linear', 'rbf']:
             raise ValueError('kernel_type must be either {} or {}'.format('linear', 'rbf'))
 
+        if not version in ['platt', 'keerthi1', 'keerthi2']:
+            raise ValueError('version must be either {}, {} or {}'.format('platt', 'keerthi1', 'keerthi2'))
+
         super().__init__()
 
         # Initialize
@@ -76,6 +80,7 @@ class SVM(Solver):
             self.kernel = self.rbf_kernel
             self.gamma_rbf = gamma_rbf
 
+        self.version = version
         self.b = np.array([])  # SVM's threshold
         self.alpha = np.array([])  # Alpha parameters of the support vectors
         self.support_vectors = np.array([])  # Matrix in which each row is a support vector
@@ -104,6 +109,20 @@ class SVM(Solver):
         return pred, scores
 
     def plot(self):
+       # get the separating hyperplane
+
+        #w = clf.coef_[0]
+        #a = -w[0] / w[1]
+        #xx = np.linspace(-2.5, 2.5)
+        #x = self.kernel(self.support_vectors, xx)
+        #yy = a * xx - (self.b) / w[1]
+
+        # plot the line, the points, and the nearest vectors to the plane
+        plt.xlim([-2.5, 2.5])
+        plt.ylim([-2.5, 2.5])
+        plt.set_cmap(plt.cm.Paired)
+        #plt.plot(xx, yy, 'k-')
+
         plt.scatter(self.support_vectors[:, 0],self.support_vectors[:, 1], s=80, marker='x', color='black')
 
     def takeStepPlatt(self, i_1, i_2) -> int:
@@ -501,8 +520,10 @@ class SVM(Solver):
 
             y_train : Labels vector, y must be {-1,1}
         """
-        self.fitPlatt(x_train, y_train)
-        #self.fitKeerthi(x_train, y_train)
+        if self.version == 'platt':
+            self.fitPlatt(x_train, y_train)
+        if self.version == 'keerthi1':
+            self.fitKeerthi(x_train, y_train)
         return
 
     def compute_boundaries(self, alpha_1, alpha_2, y_1, y_2 ) -> Tuple[float, float]:

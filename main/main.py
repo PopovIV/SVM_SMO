@@ -9,6 +9,8 @@ from sklearn.model_selection import train_test_split
 from smo import SVM, OneVsAllClassifier
 from sklearn import svm
 
+from timeit import default_timer as timer
+
 # Generate linearly separable data
 def generate_linearly_separable_data(size):
     allData = -2.5 + np.random.uniform(0, 1, size * 2) * 5
@@ -24,8 +26,12 @@ def generate_linearly_separable_data(size):
 def test_svmlib_linear(X, Y):
     # fit the model
     clf = svm.SVC(kernel='linear', C=1)
+    print("LibSvm")
+    start = timer()
     clf.fit(X, Y)
-
+    end = timer()
+    print("Time")
+    print(end - start)
     # get the separating hyperplane
     w = clf.coef_[0]
     a = -w[0] / w[1]
@@ -66,6 +72,7 @@ def test_platt_linear(X, Y):
         c=1.0,
         kkt_thr=1e-3,
         max_iter=1e3,
+        version='platt',
     )
     # plot points
     for i in range(len(X)):
@@ -75,11 +82,40 @@ def test_platt_linear(X, Y):
             color = 'b'
         pl.plot(X[i][0], X[i][1], c = color, marker="o")
 
+    start = timer()
     solver.fit(X, Y)
+    end = timer()
+    print("Time")
+    print(end - start)
+    pl.show()
+
+def test_kerthi1_linear(X, Y):
+    solver = OneVsAllClassifier(
+        solver=SVM,
+        num_classes=2,
+        c=1.0,
+        kkt_thr=1e-3,
+        max_iter=1e3,
+        version='keerthi1',
+    )
+    # plot points
+    for i in range(len(X)):
+        if (Y[i] == 1):
+            color = 'r'
+        else:
+            color = 'b'
+        pl.plot(X[i][0], X[i][1], c = color, marker="o")
+
+    start = timer()
+    solver.fit(X, Y)
+    end = timer()
+    print("Time")
+    print(end - start)
     solver.plot()
     pl.show()
 
 X, Y = generate_linearly_separable_data(100)
-test_svmlib_linear(X, Y)
 
+test_svmlib_linear(X, Y)
 test_platt_linear(np.array(X), np.array(Y))
+test_kerthi1_linear(np.array(X), np.array(Y))
