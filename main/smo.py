@@ -1,9 +1,8 @@
-
 from typing import Tuple
 
 import numpy as np
 import random
-import matplotlib.pyplot as plt
+import time
 
 class Solver:
     """
@@ -39,13 +38,12 @@ class SVM(Solver):
     
     def __init__(
         self,
-        c: float = 1.,
+        c: float = 10.,
         kkt_thr: float = 1e-3,
-        eps: float = 10e-3,
+        eps: float = 10e-5,
         max_iter: int = 1e4,
-        kernel_type: str = 'linear',
-        gamma_rbf: float = 1,
-        version: float = 'platt'
+        kernel_type: str = 'rbf',
+        gamma_rbf: float = 0.01
     ) -> None:
 
         """
@@ -64,9 +62,6 @@ class SVM(Solver):
         if not kernel_type in ['linear', 'rbf']:
             raise ValueError('kernel_type must be either {} or {}'.format('linear', 'rbf'))
 
-        if not version in ['platt', 'keerthi1', 'keerthi2']:
-            raise ValueError('version must be either {}, {} or {}'.format('platt', 'keerthi1', 'keerthi2'))
-
         super().__init__()
 
         # Initialize
@@ -74,7 +69,6 @@ class SVM(Solver):
         self.eps = eps
         self.max_iter = max_iter
         self.kkt_thr = kkt_thr
-        self.version = version
         if kernel_type == 'linear':
             self.kernel = self.linear_kernel
         elif kernel_type == 'rbf':
@@ -103,27 +97,10 @@ class SVM(Solver):
         w = self.support_labels * self.alpha
         x = self.kernel(self.support_vectors, x)
 
-        scores = np.matmul(w, x) + self.b
+        scores = np.matmul(w, x) - self.b
         pred = np.sign(scores)
 
         return pred, scores
-
-    def plot(self):
-       # get the separating hyperplane
-
-        #w = clf.coef_[0]
-        #a = -w[0] / w[1]
-        #xx = np.linspace(-2.5, 2.5)
-        #x = self.kernel(self.support_vectors, xx)
-        #yy = a * xx - (self.b) / w[1]
-
-        # plot the line, the points, and the nearest vectors to the plane
-        plt.xlim([-2.5, 2.5])
-        plt.ylim([-2.5, 2.5])
-        plt.set_cmap(plt.cm.Paired)
-        #plt.plot(xx, yy, 'k-')
-
-        plt.scatter(self.support_vectors[:, 0],self.support_vectors[:, 1], s=80, marker='x', color='black')
 
     def takeStepPlatt(self, i_1, i_2) -> int:
         if i_1 == i_2:
@@ -143,12 +120,23 @@ class SVM(Solver):
         E_2 = score_2 - y_2
 
         # Update boundaries
-        L, H = self.compute_boundaries(alpha_1, alpha_2, y_1, y_2)
+        L = 0
+        H = 0
+        if y_1 == y_2:
+            L = max(0, alpha_1 + alpha_2 - self.c)
+            H = min(self.c, alpha_1 + alpha_2)
+        else:
+            L = max(0, alpha_2 - alpha_1)
+            H = min(self.c, self.c + alpha_2 - alpha_1)
+
         if L == H:
             return 0
 
         # Compute eta
-        eta = self.compute_eta(x_1, x_2)
+        k11 = self.kernel(x_1, x_1)
+        k22 = self.kernel(x_2, x_2)
+        k12 = self.kernel(x_1, x_2)
+        eta = k11 + k22 - 2 * k12
         
         a2 = 0
         if (eta > 0):
@@ -162,14 +150,14 @@ class SVM(Solver):
             
             Lobj = c1 * L * L + c2 * L
             Hobj = c1 * H * H + c2 * H
-            if (Lobj < Hobj - self.eps):
+            if (Lobj > Hobj):
                 a2 = L
-            elif (Lobj > Hobj + self.eps):
+            elif (Lobj < Hobj):
                 a2 = H
             else:
                 a2 = alpha_2
 
-        if (abs(a2 - alpha_2) < self.eps * (a2 + alpha_2 + self.eps)):
+        if (abs(a2 - alpha_2) < self.eps):
             return 0
             
         # Compute alpha_1
@@ -181,12 +169,20 @@ class SVM(Solver):
             a2 = a2 + y_1*y_2*a1
             a1 = 0
         elif a1 > self.c:
-            t = a1 - self.c;
-            a2 = a2 + y_1*y_2 * t;
-            a1 = self.c;
+            t = a1 - self.c
+            a2 = a2 + y_1*y_2 * t
+            a1 = self.c
 
         # Update threshold b (must be before updating alpha's)
-        self.compute_b(a1, a2, E_1, E_2, i_1, i_2)
+        b1 = self.b + (E_1 + y_1 * (a1 - alpha_1) * k11 + y_2 * (a2 - alpha_2) * k12)
+        b2 = self.b + (E_2 + y_1 * (a1 - alpha_1) * k12 + y_2 * (a2 - alpha_2) * k22)
+
+        if a1 > 0 and a1 < self.c:
+            self.b = b1
+        elif a2 > 0 and a2 < self.c:
+            self.b = b2
+        else:
+            self.b = (b1 + b2) / 2
 
         # Update alpha vector
         self.alpha[i_1] = a1
@@ -219,7 +215,7 @@ class SVM(Solver):
             
             # 2) If we cannot make progress with the best non-bound example, then try any non-bound examples
             #  (start iterating at random position in order not to bias smo towards example at the beginnig of the dataset)
-            startIndex = random.randrange(0, len(self.alpha))
+            startIndex = 0#random.randrange(0, len(self.alpha))
             for i in range(startIndex, len(self.alpha)):
                 if self.alpha[i] > 0 and self.alpha[i] < self.c:
                     if (self.takeStepPlatt(i, i2)):
@@ -234,7 +230,7 @@ class SVM(Solver):
             # 3) If we cannot make progress with the non-bound examples, then try any example.
             #(start iterating at random position in order not to bias smo towards example at the beginnig of the dataset)
             
-            startIndex = random.randrange(0, len(self.alpha))
+            startIndex = 0#random.randrange(0, len(self.alpha))
             for i in range(startIndex, len(self.alpha)):
                 if (self.takeStepPlatt(i, i2)):
                     return 1
@@ -256,8 +252,16 @@ class SVM(Solver):
         iter_idx = 0
         numChanged = 0
         examineAll = 1
-        
-        print("SVM training using origianl SMO algorithm - START")
+
+        # calculate start bias
+        biases = 0
+        self.b = 0
+        for i in range(len(self.support_vectors)):
+            biases += self.support_labels[i] - self.predict(self.support_vectors[i])[1]
+
+        self.b = biases / max(len(self.support_vectors), 1)
+
+        #print("SVM training using origianl SMO algorithm - START")
         while iter_idx < self.max_iter and (numChanged > 0 or examineAll):
             numChanged = 0
             
@@ -276,14 +280,22 @@ class SVM(Solver):
 
             iter_idx = iter_idx + 1
 
+        # calculate final bias
+        #biases = 0
+        #self.b = 0
+        #for i in range(len(self.support_vectors)):
+        #    biases += self.predict(self.support_vectors[i])[1] - self.support_labels[i]
+
+        #self.b = biases / max(len(self.support_vectors), 1)
+
         # Store only support vectors
         support_vectors_idx = (self.alpha != 0)
         self.support_labels = self.support_labels[support_vectors_idx]
         self.support_vectors = self.support_vectors[support_vectors_idx, :]
         self.alpha = self.alpha[support_vectors_idx]
 
-        print(f"Training summary: {iter_idx} iterations, {self.alpha.shape[0]} supports vectors")
-        print("SVM training using SMO algorithm - DONE!")
+        #print(f"Training summary: {iter_idx} iterations, {self.alpha.shape[0]} supprts vectors")
+        #print("SVM training using SMO algorithm - DONE!")
 
     def takeStepKeerthi(self, i_1, i_2) -> int:
         if i_1 == i_2:
@@ -506,9 +518,10 @@ class SVM(Solver):
         for i in range(N):
             allBias += y_train[i] - self.predict(x_train[i, :])[1]
         
+        print("Iterations ", iter_idx)
         self.b = allBias / N
-        print(f"Training summary: {iter_idx} iterations, {self.alpha.shape[0]} supprts vectors")
-        print("SVM training using SMO algorithm - DONE!")
+        #print(f"Training summary: {iter_idx} iterations, {self.alpha.shape[0]} supprts vectors")
+        #print("SVM training using SMO algorithm - DONE!")
 
     def fit(self, x_train: np.ndarray, y_train: np.ndarray) -> None:
 
@@ -520,10 +533,8 @@ class SVM(Solver):
 
             y_train : Labels vector, y must be {-1,1}
         """
-        if self.version == 'platt':
-            self.fitPlatt(x_train, y_train)
-        if self.version == 'keerthi1':
-            self.fitKeerthi(x_train, y_train)
+        self.fitPlatt(x_train, y_train)
+        #self.fitKeerthi(x_train, y_train)
         return
 
     def compute_boundaries(self, alpha_1, alpha_2, y_1, y_2 ) -> Tuple[float, float]:
@@ -550,6 +561,7 @@ class SVM(Solver):
             ub = np.min([self.c, self.c + alpha_2 - alpha_1])
         return lb, ub
 
+    
     def compute_eta(self, x_1, x_2) -> float:
 
         """
@@ -600,7 +612,7 @@ class SVM(Solver):
         else:
             self.b = np.mean([b1, b2])
 
-    def rbf_kernel(gamma, u, v):
+    def rbf_kernel(self, u, v):
 
         """
         RBF kernel implementation, i.e. K(u,v) = exp(-gamma_rbf*|u-v|^2).
@@ -664,6 +676,15 @@ class SVM(Solver):
         """
 
         return np.dot(u, v.T)
+    
+    def get_w(self):
+        w = np.zeros_like(self.support_vectors[0])
+        for i in range(len(self.support_labels)):
+            w += self.support_labels[i] * self.alpha[i] * self.support_vectors[i]
+        return w
+        
+    def get_b(self):
+        return self.b
 
 
 class OneVsAllClassifier:
@@ -717,10 +738,6 @@ class OneVsAllClassifier:
 
         return pred
 
-    def plot(self):
-        for idx in range(self._num_classes):
-            self._binary_classifiers[idx].plot()
-
     def fit(
         self,
         x_train: np.ndarray,
@@ -739,6 +756,11 @@ class OneVsAllClassifier:
         for idx in range(self._num_classes):
             # Convert labels to binary {+1,-1}
             y_tmp = 1.*(y_train == idx) - 1.*(y_train != idx)
-
+            
+            print(f"Fitting classifier {idx}/{self._num_classes}")
+            
+            start_time = time.time()
             # Train a binary classifier
             self._binary_classifiers[idx].fit(x_train, y_tmp)
+            end_time = time.time()
+            print(f"Finished. Time passed {end_time - start_time}s")
